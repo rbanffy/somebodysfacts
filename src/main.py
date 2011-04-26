@@ -36,9 +36,26 @@ class MainHandler(webapp.RequestHandler):
         raise NotImplementedError
 
 
+class FactFightHandler(webapp.RequestHandler):
+    def get(self):
+        raise NotImplementedError
+    
+    def post(self):
+        raise NotImplementedError
+
+
+class SubmitAFactHandler(webapp.RequestHandler):
+    def get(self):
+        raise NotImplementedError
+    
+    def post(self):
+        raise NotImplementedError
+
 
 def main():
-    application = webapp.WSGIApplication([('/', MainHandler)],
+    application = webapp.WSGIApplication([('/', MainHandler),
+                                          ('/fact_fight', FactFightHandler),
+                                          ('/submit', SubmitAFactHandler)],
                                          debug=True)
     util.run_wsgi_app(application)
 
