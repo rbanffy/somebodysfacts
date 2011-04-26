@@ -1,0 +1,26 @@
+application: somebodysfacts
+version: 1
+runtime: python
+api_version: 1
+
+handlers:
+- url: /css
+  static_dir: static/css
+
+- url: /images
+  static_dir: static/images
+
+- url: /js
+  static_dir: static/js
+
+- url: /test.*
+  script: gaeunit.py
+
+- url: .*
+  script: main.py
+
+builtins:
+- datastore_admin: on
+- remote_api: on
+- appstats: on
+- deferred: on
