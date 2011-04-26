@@ -1,0 +1,30 @@
+<!doctype html>  
+<html>
+  <head>
+    <title>Sample app</title>
+    <link rel="/css/main.css" href="url" type="text/css" media="screen" />
+    <script type="text/javascript" src="/js/main.js"></script>
+  </head>
+  <body>
+{% block userbar %}
+    <div id="userbar">
+      username or login options
+    </div>
+{% endblock %}
+{% block header %}
+    <div id="header">
+      <h1>Header goes here</h1>
+    </div>
+{% endblock %}
+{% block contents %}
+    <div id="contents">
+      <p>Content goes here</p>  
+    </div>
+{% endblock %}
+{% block footer %}
+    <div id="footer">
+      <p>Footer goes here</p> 
+    </div>
+{% endblock %}
+  </body>
+</html>
