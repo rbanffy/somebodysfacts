@@ -28,18 +28,29 @@ class Fact(db.Model):
         super(Fact, self).__init__(*args, **kwargs)
         self.random_index = random.randint(0, sys.maxint)
 
-    def calculated_elo_rating(self):
+    @property
+    def k_factor(self):
         """
-        Calculates the Elo rating based on the instance properties
+        Gives the correction (K) factor
         """
-        return (self.total_opponent_ratings + 400 * (self.wins - self.losses)) / self.games
+        if self.elo_rating <= 2100:
+            return 32
+        elif self.elo_rating <= 2400:
+            return 24
+        else:
+            return 16
+
+    def expected_chance(self, fact):
+        """
+        Gives the expected odds of this fact winning a match with fact
+        """
+        return 1 / (1 + 10 ** ((self.elo_rating + fact.elo_rating) / 400.))
 
     def won_over(self, fact):
         """
-        Instance won a match over another fact
+        Instance won a match over another fact. Recalculates Elo ratings and saves them
 
         fact1.won_over(fact2)
-
         """
         if self == fact:
             raise ValueError('A fact cannot compete with itself')
