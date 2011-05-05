@@ -7,7 +7,7 @@
 from models import *
 
 for i in range(10):
-  Fact().put()
+  Fact(text = 'fact %d' % i).put()
 
 
 # Time how long it takes to grab a random entry from the datastore
@@ -36,9 +36,13 @@ num_battles = 500
 for i in range(num_battles):
   fact1 = Fact.random()
   fact2 = Fact.random(exclude = [fact1])
-  if fact1.elo_rating > 1.1 * fact2.elo_rating:
-    fact1.won_over(fact2)
-  else:
-    fact2.won_over(fact1)
+  fact1.won_over(fact2)
 
 print float((datetime.datetime.now() - before).seconds) / num_battles
+
+
+# Print he average Elo rating for the fact population
+
+from models import *
+
+print sum([f.elo_rating for f in Fact.all()]) / len([f for f in Fact.all()])
