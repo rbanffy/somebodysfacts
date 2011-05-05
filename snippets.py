@@ -45,4 +45,17 @@ print float((datetime.datetime.now() - before).seconds) / num_battles
 
 from models import *
 
-print sum([f.elo_rating for f in Fact.all()]) / len([f for f in Fact.all()])
+print sum([f.elo_rating for f in Fact.all()]) / Fact.all().count()
+
+# See how scores vary with battles
+from models import *
+
+def battles(n):
+  for i in range(n):
+    fact1 = Fact.random()
+    fact2 = Fact.random(exclude = [fact1])
+    fact1.won_over(fact2)
+
+for i in range(10):
+  battles(10)
+  print sum([f.elo_rating for f in Fact.all()]) / Fact.all().count()
