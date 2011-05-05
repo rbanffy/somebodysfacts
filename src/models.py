@@ -22,7 +22,7 @@ class Fact(db.Model):
     wins = db.IntegerProperty(default = 0)
     losses = db.IntegerProperty(default = 0)
     games = db.IntegerProperty(default = 0)
-    elo_rating = db.FloatProperty(default = 1500.)
+    elo_rating = db.FloatProperty(default = 400.)
 
     def __init__(self, *args, **kwargs):
         super(Fact, self).__init__(*args, **kwargs)
@@ -34,13 +34,13 @@ class Fact(db.Model):
         Gives the correction (K) factor
         """
         if self.elo_rating <= 2100:
-            return 32
+            return 32.
         elif self.elo_rating <= 2400:
-            return 24
+            return 24.
         else:
-            return 16
+            return 16.
 
-    def expected_chance(self, fact):
+    def expected_chance_against(self, fact):
         """
         Gives the expected odds of this fact winning a match with fact
         """
@@ -54,19 +54,29 @@ class Fact(db.Model):
         """
         if self == fact:
             raise ValueError('A fact cannot compete with itself')
-        
-        previous_elo_rating = self.elo_rating
 
+        previous_elo_rating = self.elo_rating
+        
+        # +------+-----+
+        # |Result|Score|
+        # +------+-----+
+        # |Win   |1    |
+        # +------+-----+
+        # |Draw  |0.5  |
+        # +------+-----+
+        # |Loss  |0    |
+        # +------+-----+
+
+        self.elo_rating = self.elo_rating + self.k_factor * (1 - self.expected_chance_against(fact))
         self.total_opponent_ratings += fact.elo_rating
         self.games += 1
         self.wins += 1
-        self.elo_rating = self.calculated_elo_rating()
         self.put()
         
+        fact.elo_rating = fact.elo_rating + fact.k_factor + (1 - fact.expected_chance_against(self))
         fact.total_opponent_ratings += previous_elo_rating
         fact.games += 1
         fact.losses += 1
-        fact.elo_rating = fact.calculated_elo_rating()
         fact.put()
 
     @classmethod
