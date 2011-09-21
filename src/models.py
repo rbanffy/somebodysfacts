@@ -24,11 +24,6 @@ class Fact(model.Model):
     games = model.IntegerProperty(default = 0)
     elo_rating = model.FloatProperty(default = 400.)
 
-    # def __init__(self, *args, **kwargs):
-    #     super(Fact, self).__init__(*args, **kwargs)
-    #     if not self.random_index:
-    #         self.random_index = random.randint(0, sys.maxint)
-
     @property
     def k_factor(self):
         "Gives the correction (K) factor"
