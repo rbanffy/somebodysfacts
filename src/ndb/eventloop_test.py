@@ -5,23 +5,22 @@ import time
 import unittest
 
 from google.appengine.api import apiproxy_stub_map
-from google.appengine.api import datastore_file_stub
-
 from google.appengine.datastore import datastore_rpc
 
-from ndb import eventloop
+from . import eventloop, test_utils
 
-class EventLoopTests(unittest.TestCase):
+class EventLoopTests(test_utils.DatastoreTest):
 
   def setUp(self):
+    super(EventLoopTests, self).setUp()
     if eventloop._EVENT_LOOP_KEY in os.environ:
       del os.environ[eventloop._EVENT_LOOP_KEY]
     self.ev = eventloop.get_event_loop()
 
   def testQueueTasklet(self):
-    def f(): return 1
-    def g(): return 2
-    def h(): return 3
+    def f(number, string, a, b): return 1
+    def g(number, string): return 2
+    def h(c, d): return 3
     t_before = time.time()
     eventloop.queue_call(1, f, 42, 'hello', a=1, b=2)
     eventloop.queue_call(3, h, c=3, d=4)
@@ -31,9 +30,9 @@ class EventLoopTests(unittest.TestCase):
     [(t1, f1, a1, k1), (t2, f2, a2, k2), (t3, f3, a3, k3)] = self.ev.queue
     self.assertTrue(t1 < t2)
     self.assertTrue(t2 < t3)
-    self.assertTrue(abs(t1 - (t_before + 1)) < t_after - t_before)
-    self.assertTrue(abs(t2 - (t_before + 2)) < t_after - t_before)
-    self.assertTrue(abs(t3 - (t_before + 3)) < t_after - t_before)
+    self.assertTrue(abs(t1 - (t_before + 1)) <= t_after - t_before)
+    self.assertTrue(abs(t2 - (t_before + 2)) <= t_after - t_before)
+    self.assertTrue(abs(t3 - (t_before + 3)) <= t_after - t_before)
     self.assertEqual(f1, f)
     self.assertEqual(f2, g)
     self.assertEqual(f3, h)
@@ -43,6 +42,26 @@ class EventLoopTests(unittest.TestCase):
     self.assertEqual(k1, {'a': 1, 'b': 2})
     self.assertEqual(k2, {})
     self.assertEqual(k3, {'c': 3, 'd': 4})
+    # Delete queued events (they would fail or take a long time).
+    ev = eventloop.get_event_loop()
+    ev.queue = []
+    ev.rpcs = {}
+
+  def testFifoOrderForEventsWithDelayNone(self):
+    order = []
+    def foo(arg): order.append(arg)
+
+    eventloop.queue_call(None, foo, 2)
+    eventloop.queue_call(None, foo, 1)
+
+    self.assertEqual(len(self.ev.queue), 2)
+    [(t1, f1, a1, k1), (t2, f2, a2, k2)] = self.ev.queue
+    self.assertEqual(a1, (2,))  # first event should has arg = 2
+    self.assertEqual(a2, (1,))  # second event should  has arg = 1
+
+    eventloop.run()
+    # test that events are executed in FIFO order, not sort order
+    self.assertEqual(order, [2, 1])
 
   def testRun(self):
     record = []
@@ -54,20 +73,18 @@ class EventLoopTests(unittest.TestCase):
     self.assertEqual(record, ['hello', 42])
 
   def testRunWithRpcs(self):
-    apiproxy_stub_map.apiproxy = apiproxy_stub_map.APIProxyStubMap()
-    stub = datastore_file_stub.DatastoreFileStub('_', None)
-    apiproxy_stub_map.apiproxy.RegisterStub('datastore_v3', stub)
     record = []
     def foo(arg):
       record.append(arg)
     eventloop.queue_call(0.1, foo, 42)
-    conn = datastore_rpc.Connection()
     config = datastore_rpc.Configuration(on_completion=foo)
-    rpc = conn.async_get(config, [])
-    self.assertEqual(len(rpc.rpcs), 1)
+    rpc = self.conn.async_get(config, [])
+    if not isinstance(rpc, apiproxy_stub_map.UserRPC):
+      self.assertEqual(len(rpc.rpcs), 1)
+      rpc = rpc.rpcs[0]
     eventloop.queue_rpc(rpc)
     eventloop.run()
-    self.assertEqual(record, [rpc.rpcs[0], 42])
+    self.assertEqual(record, [rpc, 42])
     self.assertEqual(rpc.state, 2)  # TODO: Use apiproxy_rpc.RPC.FINISHING.
 
 def main():

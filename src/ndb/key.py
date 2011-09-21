@@ -74,6 +74,7 @@ __author__ = 'guido@google.com (Guido van Rossum)'
 import base64
 import os
 
+from google.appengine.api import datastore_errors
 from google.appengine.api import namespace_manager
 from google.appengine.datastore import datastore_rpc
 from google.appengine.datastore import entity_pb
@@ -135,12 +136,21 @@ class Key(object):
 
   - hash(key) -- a hash value sufficient for storing Keys in a dict.
 
-  - key.pairs() -- a list of (kind, id) pairs.
+  - key.pairs() -- a tuple of (kind, id) pairs.
 
-  - key.flat() -- a list of flattened kind and id values, i.e.
-    [kind1, id1, kind2, id2, ...].
+  - key.flat() -- a tuple of flattened kind and id values, i.e.
+    (kind1, id1, kind2, id2, ...).
 
   - key.app() -- the application id.
+
+  - key.id() -- the string or integer id in the last (kind, id) pair,
+    or None if the key is incomplete.
+
+  - key.string_id() -- the string id in the last (kind, id) pair,
+    or None if the key has an integer id or is incomplete.
+
+  - key.integer_id() -- the integer id in the last (kind, id) pair,
+    or None if the key has a string id or is incomplete.
 
   - key.namespace() -- the namespace.
 
@@ -153,15 +163,8 @@ class Key(object):
 
   - key.serialized() -- a serialized Reference.
 
-  - key.reference() -- a Reference object.  Since Reference objects are
-    mutable, this returns a brand new Reference object.
-
-  - key._reference() -- the Reference object contained in the Key.
-    The caller promises not to mutate it.
-
-  - key._pairs() -- an iterator, equivalent to iter(key.pairs()).
-
-  - key._flat() -- an iterator, equivalent to iter(key.flat()).
+  - key.reference() -- a Reference object.  The caller promises not to
+    mutate it.
 
   Keys also support interaction with the datastore; these methods are
   the only ones that engage in any kind of I/O activity.  For Future
@@ -181,7 +184,7 @@ class Key(object):
   Subclassing Key is best avoided; it would be hard to get right.
   """
 
-  __slots__ = ['__reference']
+  __slots__ = ['__reference', '__pairs', '__app', '__namespace']
 
   def __new__(cls, *_args, **kwargs):
     """Constructor.  See the class docstring for arguments."""
@@ -195,8 +198,67 @@ class Key(object):
         assert 'flat' not in kwargs
         kwargs['flat'] = _args
     self = super(Key, cls).__new__(cls)
-    self.__reference = _ConstructReference(cls, **kwargs)
+    # Either __reference or (__pairs, __app, __namespace) must be set.
+    # Either one fully specifies a key; if both are set they must be
+    # consistent with each other.
+    if 'reference' in kwargs or 'serialized' in kwargs or 'urlsafe' in kwargs:
+      self.__reference = _ConstructReference(cls, **kwargs)
+      self.__pairs = None
+      self.__app = None
+      self.__namespace = None
+    elif 'pairs' in kwargs or 'flat' in kwargs:
+      self._build_from_args(**kwargs)
     return self
+
+  def _build_from_args(self, pairs=None, flat=None,
+                       app=None, namespace=None, parent=None):
+    if flat:
+      assert not pairs
+      assert len(flat) % 2 == 0
+      pairs = [(flat[i], flat[i+1]) for i in xrange(0, len(flat), 2)]
+    else:
+      pairs = list(pairs)
+    assert pairs
+    for i, (kind, id) in enumerate(pairs):
+      if isinstance(id, unicode):
+        id = id.encode('utf8')
+      elif id is None:
+        if i+1 < len(pairs):
+          raise datastore_errors.BadArgumentError(
+            'Incomplete Key entry must be last')
+      else:
+        assert isinstance(id, (int, long, str))
+      if isinstance(kind, type):
+        kind = kind._get_kind()
+      if isinstance(kind, unicode):
+        kind = kind.encode('utf8')
+      assert isinstance(kind, str), repr(kind)
+      pairs[i] = (kind, id)
+    if parent is not None:
+      if not isinstance(parent, Key):
+        raise datastore_errors.BadValueError(
+            'Expected Key instance, got %r' % parent)
+      if not parent.id():
+        raise datastore_errors.BadArgumentError(
+          'Parent cannot have incomplete key')
+      pairs[:0] = parent.pairs()
+      if app:
+        assert app == parent.app(), (app, parent.app())
+      else:
+        app = parent.app()
+      if namespace is not None:
+        assert namespace == parent.namespace(), (namespace,
+                                                 parent.namespace())
+      else:
+        namespace = parent.namespace()
+    if not app:
+      app = _DefaultAppId()
+    if namespace is None:
+      namespace = _DefaultNamespace()
+    self.__pairs = tuple(pairs)
+    self.__app = app
+    self.__namespace = namespace 
+    self.__reference = None
 
   def __repr__(self):
     """String representation, used by str() and repr().
@@ -206,7 +268,7 @@ class Key(object):
     """
     # TODO: Instead of "Key('Foo', 1)" perhaps return "Key(Foo, 1)" ?
     args = []
-    for item in self._flat():
+    for item in self.flat():
       if not item:
         args.append('None')
       elif isinstance(item, basestring):
@@ -228,13 +290,13 @@ class Key(object):
     # doesn't need to return a unique value -- it only needs to ensure
     # that the hashes of equal keys are equal, not the other way
     # around.
-    return hash(tuple(self._pairs()))
+    return hash(tuple(self.pairs()))
 
   def __eq__(self, other):
     """Equality comparison operation."""
     if not isinstance(other, Key):
       return NotImplemented
-    return (tuple(self._pairs()) == tuple(other._pairs()) and
+    return (tuple(self.pairs()) == tuple(other.pairs()) and
             self.app() == other.app() and
             self.namespace() == other.namespace())
 
@@ -246,7 +308,7 @@ class Key(object):
 
   def __getstate__(self):
     """Private API used for pickling."""
-    return ({'pairs': tuple(self._pairs()),
+    return ({'pairs': list(self.pairs()),
              'app': self.app(),
              'namespace': self.namespace()},)
 
@@ -255,11 +317,14 @@ class Key(object):
     assert len(state) == 1
     kwargs = state[0]
     assert isinstance(kwargs, dict)
-    self.__reference = _ConstructReference(self.__class__, **kwargs)
+    self.__reference = None
+    self.__pairs = kwargs['pairs']
+    self.__app = kwargs['app']
+    self.__namespace = kwargs['namespace']
 
   def __getnewargs__(self):
     """Private API used for pickling."""
-    return ({'pairs': tuple(self._pairs()),
+    return ({'pairs': tuple(self.pairs()),
              'app': self.app(),
              'namespace': self.namespace()},)
 
@@ -273,69 +338,117 @@ class Key(object):
       return None
     return Key(pairs=pairs[:-1], app=self.app(), namespace=self.namespace())
 
+  def root(self):
+    """Return the root key.  This is either self or the highest parent."""
+    pairs = self.pairs()
+    if len(pairs) <= 1:
+      return self
+    return Key(pairs=pairs[:1], app=self.app(), namespace=self.namespace())
+
   def namespace(self):
     """Return the namespace."""
-    return self.__reference.name_space()
+    if self.__namespace is None:
+      self.__namespace = self.__reference.name_space()
+    return self.__namespace
 
   def app(self):
     """Return the application id."""
-    return self.__reference.app()
+    if self.__app is None:
+      self.__app = self.__reference.app()
+    return self.__app
+
+  def id(self):
+    """Return the string or integer id in the last (kind, id) pair, if any.
+
+    Returns:
+      A string or integer id, or None if the key is incomplete.
+    """
+    if self.__pairs:
+      return self.__pairs[-1][1]
+    elem = self.__reference.path().element(-1)
+    return elem.name() or elem.id() or None
+
+  def string_id(self):
+    """Return the string id in the last (kind, id) pair, if any.
+
+    Returns:
+      A string id, or None if the key has an integer id or is incomplete.
+    """
+    if self.__reference is None:
+      id = self.id()
+      if not isinstance(id, basestring):
+        id = None
+      return id
+    elem = self.__reference.path().element(-1)
+    return elem.name() or None
+
+  def integer_id(self):
+    """Return the integer id in the last (kind, id) pair, if any.
+
+    Returns:
+      An integer id, or None if the key has a string id or is incomplete.
+    """
+    if self.__reference is None:
+      id = self.id()
+      if not isinstance(id, (int, long)):
+        id = None
+      return id
+    elem = self.__reference.path().element(-1)
+    return elem.id() or None
 
   def pairs(self):
-    """Return a list of (kind, id) pairs."""
-    return list(self._pairs())
-
-  def _pairs(self):
-    """Iterator yielding (kind, id) pairs."""
-    for elem in self.__reference.path().element_list():
-      kind = elem.type()
-      if elem.has_id():
-        idorname = elem.id()
-      else:
-        idorname = elem.name()
-      if not idorname:
-        idorname = None
-      yield (kind, idorname)
+    """Return a tuple of (kind, id) pairs."""
+    pairs = self.__pairs
+    if pairs is None:
+      pairs = []
+      for elem in self.__reference.path().element_list():
+        kind = elem.type()
+        if elem.has_id():
+          idorname = elem.id()
+        else:
+          idorname = elem.name()
+        if not idorname:
+          idorname = None
+        tup = (kind, idorname)
+        pairs.append(tup)
+      self.__pairs = pairs = tuple(pairs)
+    return pairs
 
   def flat(self):
-    """Return a list of alternating kind and id values."""
-    return list(self._flat())
-
-  def _flat(self):
-    """Iterator yielding alternating kind and id values."""
-    for kind, idorname in self._pairs():
-      yield kind
-      yield idorname
+    """Return a tuple of alternating kind and id values."""
+    flat = []
+    for kind, id in self.pairs():
+      flat.append(kind)
+      flat.append(id)
+    return tuple(flat)
 
   def kind(self):
     """Return the kind of the entity referenced.
 
     This is the kind from the last (kind, id) pair.
     """
-    kind = None
-    for elem in self.__reference.path().element_list():
-      kind = elem.type()
-    return kind
+    if self.__pairs:
+      return self.__pairs[-1][0]
+    return self.__reference.path().element(-1).type()
 
   def reference(self):
-    """Return a copy of the Reference object for this Key.
+    """Return the Reference object for this Key.
 
     This is a entity_pb.Reference instance -- a protocol buffer class
     used by the lower-level API to the datastore.
-    """
-    return _ReferenceFromReference(self.__reference)
 
-  def _reference(self):
-    """Return the Reference object for this Key.
-
-    This is a backdoor API for internal use only.  The caller should
-    not mutate the return value.
+    NOTE: The caller should not mutate the return value.
     """
+    if self.__reference is None:
+      self.__reference = _ConstructReference(self.__class__,
+                                             pairs=self.__pairs,
+                                             app=self.__app,
+                                             namespace=self.__namespace)
     return self.__reference
 
   def serialized(self):
     """Return a serialized Reference object for this Key."""
-    return self.__reference.Encode()
+    return self.reference().Encode()
 
   def urlsafe(self):
     """Return a url-safe string encoding this Key's Reference.
@@ -345,36 +458,36 @@ class Key(object):
     Admin Console.
     """
     # This is 3-4x faster than urlsafe_b64decode()
-    urlsafe = base64.b64encode(self.__reference.Encode())
+    urlsafe = base64.b64encode(self.reference().Encode())
     return urlsafe.rstrip('=').replace('+', '-').replace('/', '_')
 
   # Datastore API using the default context.
   # These use local import since otherwise they'd be recursive imports.
 
-  def get(self):
+  def get(self, **ctx_options):
     """Synchronously get the entity for this Key.
 
     Return None if there is no such entity.
     """
-    return self.get_async().get_result()
+    return self.get_async(**ctx_options).get_result()
 
-  def get_async(self):
+  def get_async(self, **ctx_options):
     """Return a Future whose result is the entity for this Key.
 
     If no such entity exists, a Future is still returned, and the
     Future's eventual return result be None.
     """
-    from ndb import tasklets
-    return tasklets.get_context().get(self)
+    from . import tasklets
+    return tasklets.get_context().get(self, **ctx_options)
 
-  def delete(self):
+  def delete(self, **ctx_options):
     """Synchronously delete the entity for this Key.
 
     This is a no-op if no such entity exists.
     """
-    return self.delete_async().get_result()
+    return self.delete_async(**ctx_options).get_result()
 
-  def delete_async(self):
+  def delete_async(self, **ctx_options):
     """Schedule deletion of the entity for this Key.
 
     This returns a Future, whose result becomes available once the
@@ -382,8 +495,9 @@ class Key(object):
     returned.  In all cases the Future's result is None (i.e. there is
     no way to tell whether the entity existed or not).
     """
-    from ndb import tasklets
-    return tasklets.get_context().delete(self)
+    from . import tasklets, model
+    ctx = tasklets.get_context()
+    return ctx.delete(self, **ctx_options)
 
 
 # The remaining functions in this module are private.
@@ -401,8 +515,13 @@ def _ConstructReference(cls, pairs=None, flat=None,
     if flat:
       assert len(flat) % 2 == 0
       pairs = [(flat[i], flat[i+1]) for i in xrange(0, len(flat), 2)]
+    elif parent is not None:
+      pairs = list(pairs)
     assert pairs
     if parent is not None:
+      if not isinstance(parent, Key):
+        raise datastore_errors.BadValueError(
+            'Expected Key instance, got %r' % parent)
       pairs[:0] = parent.pairs()
       if app:
         assert app == parent.app(), (app, parent.app())
@@ -421,7 +540,8 @@ def _ConstructReference(cls, pairs=None, flat=None,
       serialized = _DecodeUrlSafe(urlsafe)
     if serialized:
       reference = _ReferenceFromSerialized(serialized)
-    assert reference.path().element_size()
+    assert reference.path().element_size(), (urlsafe, serialized,
+                                             str(reference))
     # TODO: assert that each element has a type and either an id or a name
     if not serialized:
       reference = _ReferenceFromReference(reference)
@@ -448,31 +568,57 @@ def _ReferenceFromPairs(pairs, reference=None, app=None, namespace=None):
   path = reference.mutable_path()
   last = False
   for kind, idorname in pairs:
-    assert not last, 'incomplete entry must be last'
-    if not isinstance(kind, basestring):
-      if isinstance(kind, type):
+    if last:
+      raise datastore_errors.BadArgumentError(
+          'Incomplete Key entry must be last')
+    t = type(kind)
+    if t is str:
+      pass
+    elif t is unicode:
+      kind = kind.encode('utf8')
+    else:
+      if issubclass(t, type):
         # Late import to avoid cycles.
-        from ndb.model import Model
+        from .model import Model
         modelclass = kind
         assert issubclass(modelclass, Model), repr(modelclass)
-        kind = modelclass.GetKind()
-      assert isinstance(kind, basestring), (repr(modelclass), repr(kind))
-    if isinstance(kind, unicode):
-      kind = kind.encode('utf8')
+        kind = modelclass._get_kind()
+        t = type(kind)
+      if t is str:
+        pass
+      elif t is unicode:
+        kind = kind.encode('utf8')
+      elif issubclass(t, str):
+        pass
+      elif issubclass(t, unicode):
+        kind = kind.encode('utf8')
+      else:
+        assert False, repr(kind)
     assert 1 <= len(kind) <= 500
     elem = path.add_element()
     elem.set_type(kind)
-    if isinstance(idorname, (int, long)):
+    t = type(idorname)
+    if t is int or t is long:
       assert 1 <= idorname < 2**63
       elem.set_id(idorname)
-    elif isinstance(idorname, basestring):
-      if isinstance(idorname, unicode):
-        idorname = idorname.encode('utf8')
+    elif t is str:
+      assert 1 <= len(idorname) <= 500
+      elem.set_name(idorname)
+    elif t is unicode:
+      idorname = idorname.encode('utf8')
       assert 1 <= len(idorname) <= 500
       elem.set_name(idorname)
     elif idorname is None:
       elem.set_id(0)
       last = True
+    elif issubclass(t, (int, long)):
+      assert 1 <= idorname < 2**63
+      elem.set_id(idorname)
+    elif issubclass(t, basestring):
+      if issubclass(t, unicode):
+        idorname = idorname.encode('utf8')
+      assert 1 <= len(idorname) <= 500
+      elem.set_name(idorname)
     else:
       assert False, 'bad idorname (%r)' % (idorname,)
   # An empty app id means to use the default app id.
