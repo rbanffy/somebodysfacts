@@ -1,28 +1,29 @@
 # -*- coding:utf-8 -*-
 
-from google.appengine.api import users
-from google.appengine.ext import db
+from ndb import model
 
 import datetime
 import logging
 import random
 import sys
 
-class Fact(db.Model):
-    author = db.UserProperty()
-    poster_ip = db.StringProperty()
-    posted_on = db.DateTimeProperty(auto_now_add = True)
-    last_changed = db.DateTimeProperty(auto_now = True)
-    text = db.TextProperty()
-    language = db.StringProperty(default = 'en') # The language of the post
+
+class Fact(model.Model):
+    author = model.StringProperty()
+    poster_ip = model.StringProperty()
+    posted_on = model.DateTimeProperty(auto_now_add = True)
+    last_changed = model.DateTimeProperty(auto_now = True)
+    text = model.TextProperty()
+    language = model.StringProperty(default = 'en') # The language of the post
     # For selecting random instances
-    random_index = db.IntegerProperty()
-    # For the Elo rating system - see http://en.wikipedia.org/wiki/Elo_rating_system
-    total_opponent_ratings = db.FloatProperty(default = 0.)
-    wins = db.IntegerProperty(default = 0)
-    losses = db.IntegerProperty(default = 0)
-    games = db.IntegerProperty(default = 0)
-    elo_rating = db.FloatProperty(default = 400.)
+    random_index = model.IntegerProperty(repeated = False)
+    # For the Elo rating system
+    # see http://en.wikipedia.org/wiki/Elo_rating_system
+    total_opponent_ratings = model.FloatProperty(default = 0.)
+    wins = model.IntegerProperty(default = 0)
+    losses = model.IntegerProperty(default = 0)
+    games = model.IntegerProperty(default = 0)
+    elo_rating = model.FloatProperty(default = 400.)
 
     def __init__(self, *args, **kwargs):
         super(Fact, self).__init__(*args, **kwargs)
@@ -48,15 +49,16 @@ class Fact(db.Model):
 
     def won_over(self, fact):
         """
-        Instance won a match over another fact. Recalculates Elo ratings and saves them
+        Self won a match over another fact. Recalculates Elo ratings and saves
+        them
 
         fact1.won_over(fact2)
         """
-        if self == fact:
+        if self.key == fact.key:
             raise ValueError('A fact cannot compete with itself')
 
         previous_elo_rating = self.elo_rating
-        
+
         # +------+-----+
         # |Result|Score|
         # +------+-----+
@@ -67,13 +69,16 @@ class Fact(db.Model):
         # |Loss  |0    |
         # +------+-----+
 
-        self.elo_rating = self.elo_rating + self.k_factor * (1 - self.expected_chance_against(fact))
+        self.elo_rating = self.elo_rating + self.k_factor * \
+            (1 - self.expected_chance_against(fact))
         self.total_opponent_ratings += fact.elo_rating
         self.games += 1
         self.wins += 1
+        logging.error(self)
         self.put()
-        
-        fact.elo_rating = fact.elo_rating + fact.k_factor + (1 - fact.expected_chance_against(self))
+
+        fact.elo_rating = fact.elo_rating + fact.k_factor + \
+            (1 - fact.expected_chance_against(self))
         fact.total_opponent_ratings += previous_elo_rating
         fact.games += 1
         fact.losses += 1
@@ -81,15 +86,14 @@ class Fact(db.Model):
 
     @classmethod
     def random(cls, exclude = []):
-        """
-        Returns a random instance
-        """
+        "Returns a random instance"
         f = None
-        while f not in exclude:
+        while True:
             position = random.randint(1, sys.maxint)
-            f = cls.all().filter('random_index >', position).order('random_index').get()
-            if f:
+            f = cls.query(cls.random_index >= position).get()
+            # f = cls.query(cls.random_index >= position).\
+            #     order(cls.random_index).get()
+            logging.debug(f)
+            if f and f not in exclude:
+                logging.error(f)
                 return f
-            else:
-                f = cls.all().filter('random_index <=', position).order('-random_index').get()
-                return f if f else None

@@ -15,47 +15,20 @@ from google.appengine.ext.webapp import template
 
 import logging
 
-import debug_tools 
+import debug_tools
 try:
     import ipdb as pdb
 except ImportError:
     import pdb
 
 from models import *
-from forms import *
-
-class MainHandler(webapp.RequestHandler):
-    def get(self):
-        """
-        The home
-        """
-        path = os.path.join(os.path.dirname(__file__), 'templates/index.html')
-        self.response.out.write(template.render(path, {'hello': 'Hello webapp world'}))
-    
-    def post(self):
-        raise NotImplementedError
-
-
-class FactFightHandler(webapp.RequestHandler):
-    def get(self):
-        raise NotImplementedError
-    
-    def post(self):
-        raise NotImplementedError
-
-
-class SubmitAFactHandler(webapp.RequestHandler):
-    def get(self):
-        raise NotImplementedError
-    
-    def post(self):
-        raise NotImplementedError
-
+from handlers import *
 
 def main():
     application = webapp.WSGIApplication([('/', MainHandler),
                                           ('/fact_fight', FactFightHandler),
-                                          ('/submit', SubmitAFactHandler)],
+                                          ('/submit', SubmitAFactHandler),
+                                          ('/random', RandomFightHandler)],
                                          debug=True)
     util.run_wsgi_app(application)
 
