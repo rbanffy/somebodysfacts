@@ -7,7 +7,6 @@ import logging
 import random
 import sys
 
-
 class Fact(model.Model):
     author = model.StringProperty()
     poster_ip = model.StringProperty()
@@ -16,7 +15,7 @@ class Fact(model.Model):
     text = model.TextProperty()
     language = model.StringProperty(default = 'en') # The language of the post
     # For selecting random instances
-    random_index = model.IntegerProperty(repeated = False)
+    random_index = model.ComputedProperty(lambda : random.randint(0, sys.maxint)
     # For the Elo rating system
     # see http://en.wikipedia.org/wiki/Elo_rating_system
     total_opponent_ratings = model.FloatProperty(default = 0.)
@@ -25,15 +24,14 @@ class Fact(model.Model):
     games = model.IntegerProperty(default = 0)
     elo_rating = model.FloatProperty(default = 400.)
 
-    def __init__(self, *args, **kwargs):
-        super(Fact, self).__init__(*args, **kwargs)
-        self.random_index = random.randint(0, sys.maxint)
+    # def __init__(self, *args, **kwargs):
+    #     super(Fact, self).__init__(*args, **kwargs)
+    #     if not self.random_index:
+    #         self.random_index = random.randint(0, sys.maxint)
 
     @property
     def k_factor(self):
-        """
-        Gives the correction (K) factor
-        """
+        "Gives the correction (K) factor"
         if self.elo_rating <= 2100:
             return 32.
         elif self.elo_rating <= 2400:
@@ -42,9 +40,7 @@ class Fact(model.Model):
             return 16.
 
     def expected_chance_against(self, fact):
-        """
-        Gives the expected odds of this fact winning a match with fact
-        """
+        "Gives the expected odds of this fact winning a match with fact"
         return 1 / (1 + 10 ** ((self.elo_rating + fact.elo_rating) / 400.))
 
     def won_over(self, fact):
@@ -74,7 +70,7 @@ class Fact(model.Model):
         self.total_opponent_ratings += fact.elo_rating
         self.games += 1
         self.wins += 1
-        logging.error(self)
+        # TODO: This could be done asynchronously
         self.put()
 
         fact.elo_rating = fact.elo_rating + fact.k_factor + \
@@ -82,18 +78,38 @@ class Fact(model.Model):
         fact.total_opponent_ratings += previous_elo_rating
         fact.games += 1
         fact.losses += 1
+        # There's not good reason to do this asynchronously - we'll exit here
         fact.put()
 
     @classmethod
     def random(cls, exclude = []):
         "Returns a random instance"
+        # TODO: do this asychronously
         f = None
         while True:
             position = random.randint(1, sys.maxint)
             f = cls.query(cls.random_index >= position).get()
-            # f = cls.query(cls.random_index >= position).\
-            #     order(cls.random_index).get()
-            logging.debug(f)
+            if not f:
+                f = cls.query(cls.random_index < position).\
+                    order(- cls.random_index).get()
             if f and f not in exclude:
                 logging.error(f)
                 return f
+
+    @classmethod
+    def random_pair(cls):
+        "Returns two distinct facts"
+        # TODO: do this asynchronously
+        pos1 = random.randint(1, sys.maxint)
+        f1 = cls.query(cls.random_index <= pos1).get()
+        if not f1:
+            f1 = cls.query(cls.random_index > pos1).get()
+        pos2 = random.randint(1, sys.maxint)
+        f2 = cls.query(cls.random_index <= pos1).get()
+        if not f2:
+            f2 = cls.query(cls.random_index > pos1).get()
+        # f1 and f2 only must be resolved here
+        if f1 == f2:
+            f2 = cls.random(exclude = [f1])
+        return (f1, f2)
+
