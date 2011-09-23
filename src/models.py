@@ -1,7 +1,6 @@
 # -*- coding:utf-8 -*-
 
 from ndb import model, tasklets
-import ndb
 
 import datetime
 import logging
@@ -16,7 +15,8 @@ class Fact(model.Model):
     text = model.TextProperty()
     language = model.StringProperty(default = 'en') # The language of the post
     # For selecting random instances
-    random_index = model.ComputedProperty(lambda self : random.randint(0, sys.maxint))
+    random_index = model.ComputedProperty(
+        lambda self : random.randint(0, sys.maxint))
     # For the Elo rating system
     # see http://en.wikipedia.org/wiki/Elo_rating_system
     total_opponent_ratings = model.FloatProperty(default = 0.)
@@ -67,8 +67,7 @@ class Fact(model.Model):
         self.total_opponent_ratings += fact.elo_rating
         self.games += 1
         self.wins += 1
-        # TODO: This could be done asynchronously
-        f1 = self.put_async()
+        self.put_async()
 
         fact.elo_rating = fact.elo_rating - fact.k_factor * \
             (1 - fact.expected_chance_against(self))
@@ -77,7 +76,6 @@ class Fact(model.Model):
         fact.total_opponent_ratings += previous_elo_rating
         fact.games += 1
         fact.losses += 1
-        # There's not good reason to do this asynchronously - we'll exit soon
         f2 = fact.put_async()
         yield f1.get_result(), f2.get_result()
 
@@ -86,15 +84,13 @@ class Fact(model.Model):
     def random(cls, exclude = []):
         "Returns a random instance"
         # TODO: do this asychronously
-        while True:
+        f = None
+        while not f:
             position = random.randint(1, sys.maxint)
             f = cls.query(cls.random_index >= position).get()
-            if not f:
-                f = cls.query(cls.random_index < position).\
-                    order(- cls.random_index).get()
-            if f and f.key not in [ e.key for e in exclude ]:
-                logging.error('got the same fact twice: ' + str(f))
-                return f
+            if f and f.key in [ e.key for e in exclude ]:
+                logging.error('got an excluded: ' + str(f))
+        return f
 
     @classmethod
     def random_pair(cls):

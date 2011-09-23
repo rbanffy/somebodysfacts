@@ -4,9 +4,10 @@ import random
 import os
 
 from google.appengine.ext import webapp
+from ndb import tasklets
+
 from models import *
 from forms import *
-from ndb import tasklets
 
 class MainHandler(webapp.RequestHandler):
     def get(self):
@@ -47,6 +48,7 @@ def battle(fact1, fact2):
 
 class ManyFightsHandler(webapp.RequestHandler):
     "Does a couple random fights"
+    @tasklets.tasklet
     def get(self, battles = 10):
         for i in range(battles):
             fact1 = Fact.random()
@@ -56,21 +58,17 @@ class ManyFightsHandler(webapp.RequestHandler):
     def post(self):
         raise NotImplementedError
 
-
 class InitFactDatabaseHandler(webapp.RequestHandler):
     "If there are no facts, provide 10 nice ones"
     @tasklets.tasklet
-    def get(self, battles = 10):
+    def get(self):
 
         if Fact.query().count() == 0:
             logging.warning('Bootstrapping facts')
             futures = []
             for i in range(10):
                 futures.append(Fact(text = 'Fact %d' % i).put_async())
-
-            [ f.get_result() for f in futures ]
-
-
+            [ f.get_result() for f in  futures ]
 
     def post(self):
         raise NotImplementedError
