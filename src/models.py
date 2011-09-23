@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 
-from ndb import model
+from ndb import model, tasklets
+import ndb
 
 import datetime
 import logging
@@ -15,7 +16,7 @@ class Fact(model.Model):
     text = model.TextProperty()
     language = model.StringProperty(default = 'en') # The language of the post
     # For selecting random instances
-    random_index = model.ComputedProperty(lambda : random.randint(0, sys.maxint)
+    random_index = model.ComputedProperty(lambda self : random.randint(0, sys.maxint))
     # For the Elo rating system
     # see http://en.wikipedia.org/wiki/Elo_rating_system
     total_opponent_ratings = model.FloatProperty(default = 0.)
@@ -38,6 +39,7 @@ class Fact(model.Model):
         "Gives the expected odds of this fact winning a match with fact"
         return 1 / (1 + 10 ** ((self.elo_rating + fact.elo_rating) / 400.))
 
+    @tasklets.tasklet
     def won_over(self, fact):
         """
         Self won a match over another fact. Recalculates Elo ratings and saves
@@ -66,34 +68,37 @@ class Fact(model.Model):
         self.games += 1
         self.wins += 1
         # TODO: This could be done asynchronously
-        self.put()
+        f1 = self.put_async()
 
-        fact.elo_rating = fact.elo_rating + fact.k_factor + \
+        fact.elo_rating = fact.elo_rating - fact.k_factor * \
             (1 - fact.expected_chance_against(self))
+        # TODO: check if Elo ratings can become negative
+        fact.elo_rating = 0 if fact.elo_rating < 0 else fact.elo_rating
         fact.total_opponent_ratings += previous_elo_rating
         fact.games += 1
         fact.losses += 1
-        # There's not good reason to do this asynchronously - we'll exit here
-        fact.put()
+        # There's not good reason to do this asynchronously - we'll exit soon
+        f2 = fact.put_async()
+        yield f1.get_result(), f2.get_result()
+
 
     @classmethod
     def random(cls, exclude = []):
         "Returns a random instance"
         # TODO: do this asychronously
-        f = None
         while True:
             position = random.randint(1, sys.maxint)
             f = cls.query(cls.random_index >= position).get()
             if not f:
                 f = cls.query(cls.random_index < position).\
                     order(- cls.random_index).get()
-            if f and f not in exclude:
-                logging.error(f)
+            if f and f.key not in [ e.key for e in exclude ]:
+                logging.error('got the same fact twice: ' + str(f))
                 return f
 
     @classmethod
     def random_pair(cls):
-        "Returns two distinct facts"
+        "Returns two random distinct facts"
         # TODO: do this asynchronously
         pos1 = random.randint(1, sys.maxint)
         f1 = cls.query(cls.random_index <= pos1).get()
