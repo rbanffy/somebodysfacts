@@ -77,7 +77,7 @@ class Fact(model.Model):
         fact.games += 1
         fact.losses += 1
         f2 = fact.put_async()
-        yield f1.get_result(), f2.get_result()
+        yield f1, f2
 
 
     @classmethod
