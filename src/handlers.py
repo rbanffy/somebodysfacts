@@ -37,6 +37,7 @@ class SubmitAFactHandler(webapp.RequestHandler):
     def post(self):
         raise NotImplementedError
 
+
 @tasklets.tasklet
 def battle(fact1, fact2):
     # the best fact has 40% chances of having a bad day

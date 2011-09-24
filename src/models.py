@@ -92,6 +92,7 @@ class Fact(model.Model):
                 logging.error('got an excluded: ' + str(f))
         return f
 
+
     @classmethod
     def random_pair(cls):
         "Returns two random distinct facts"
