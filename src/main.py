@@ -30,6 +30,7 @@ def main():
                                           ('/submit', SubmitAFactHandler),
                                           ('/random', ManyFightsHandler),
                                           ('/init', InitFactDatabaseHandler),
+                                          ('/randomize', RandomizeRatingsHandler),
                                           ('/fight', SingleFightHandler)],
                                          debug=True)
     util.run_wsgi_app(application)

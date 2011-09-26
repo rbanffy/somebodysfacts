@@ -72,17 +72,33 @@ class SingleFightHandler(webapp.RequestHandler):
         raise NotImplementedError
 
 
+@tasklets.tasklet
+def init_fact_database(n = 10):
+    if Fact.query().count(1) == 0:
+        logging.warning('Bootstrapping facts')
+        futures = []
+        for i in range(n):
+            futures.append(Fact(text = 'Fact %d' % i).put_async())
+        raise tasklets.Return(futures)
+
+
 class InitFactDatabaseHandler(webapp.RequestHandler):
     "If there are no facts, provide 10 nice ones"
+    @context.toplevel
     def get(self):
-
-        if Fact.query().count() == 0:
-            logging.warning('Bootstrapping facts')
-            futures = []
-            for i in range(10):
-                futures.append(Fact(text = 'Fact %d' % i).put_async())
-            [ f.get_result() for f in  futures ]
+        init_fact_database()
 
     def post(self):
         raise NotImplementedError
 
+
+@tasklets.tasklet
+def randomize_rating(f):
+    f.elo_rating = random.normalvariate(400, 20)
+    raise tasklets.Return(f.put_async())
+
+
+class RandomizeRatingsHandler(webapp.RequestHandler):
+    @context.toplevel
+    def get(self):
+        Fact.query().map_async(randomize_rating)
