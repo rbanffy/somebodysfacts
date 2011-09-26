@@ -67,7 +67,7 @@ class Fact(model.Model):
         self.total_opponent_ratings += fact.elo_rating
         self.games += 1
         self.wins += 1
-        self.put_async()
+        f1 = self.put_async()
 
         fact.elo_rating = fact.elo_rating - fact.k_factor * \
             (1 - fact.expected_chance_against(self))
@@ -80,6 +80,35 @@ class Fact(model.Model):
         yield f1, f2
 
 
+    def sync_won_over(self, fact):
+        """
+        Self won a match over another fact. Recalculates Elo ratings and saves
+        them, but do it synchronously
+
+        fact1.sync_won_over(fact2)
+        """
+        if self.key == fact.key:
+            raise ValueError('A fact cannot compete with itself')
+
+        previous_elo_rating = self.elo_rating
+
+        self.elo_rating = self.elo_rating + self.k_factor * \
+            (1 - self.expected_chance_against(fact))
+        self.total_opponent_ratings += fact.elo_rating
+        self.games += 1
+        self.wins += 1
+        self.put()
+
+        fact.elo_rating = fact.elo_rating - fact.k_factor * \
+            (1 - fact.expected_chance_against(self))
+        # TODO: check if Elo ratings can become negative
+        fact.elo_rating = 0 if fact.elo_rating < 0 else fact.elo_rating
+        fact.total_opponent_ratings += previous_elo_rating
+        fact.games += 1
+        fact.losses += 1
+        f2 = fact.put()
+
+
     @classmethod
     def random(cls, exclude = []):
         "Returns a random instance"
@@ -90,6 +119,7 @@ class Fact(model.Model):
             f = cls.query(cls.random_index >= position).get()
             if f and f.key in [ e.key for e in exclude ]:
                 logging.error('got an excluded: ' + str(f))
+                f = None # Try again
         return f
 
 

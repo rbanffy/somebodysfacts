@@ -28,10 +28,13 @@ def main():
     application = webapp.WSGIApplication([('/', MainHandler),
                                           ('/fact_fight', FactFightHandler),
                                           ('/submit', SubmitAFactHandler),
-                                          ('/random', ManyFightsHandler),
+                                          ('/ten_fights', ManyFightsHandler),
                                           ('/init', InitFactDatabaseHandler),
-                                          ('/randomize', RandomizeRatingsHandler),
-                                          ('/fight', SingleFightHandler)],
+                                          ('/randomize',
+                                           RandomizeRatingsHandler),
+                                          ('/fight', SingleFightHandler),
+                                          ('/fight_sync',
+                                           SynchronousSingleFightHandler)],
                                          debug=True)
     util.run_wsgi_app(application)
 

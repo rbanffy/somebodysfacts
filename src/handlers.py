@@ -16,9 +16,6 @@ class MainHandler(webapp.RequestHandler):
         self.response.out.write(template.render(path, {'hello':
                                                        'Hello webapp world'}))
 
-    def post(self):
-        raise NotImplementedError
-
 
 class FactFightHandler(webapp.RequestHandler):
     "Handles a fact fight page"
@@ -56,9 +53,6 @@ class ManyFightsHandler(webapp.RequestHandler):
             fact2 = Fact.random(exclude = [fact1])
             battle(fact1, fact2)
 
-    def post(self):
-        raise NotImplementedError
-
 
 class SingleFightHandler(webapp.RequestHandler):
     "Does one fight between two random facts"
@@ -68,8 +62,21 @@ class SingleFightHandler(webapp.RequestHandler):
         fact2 = Fact.random(exclude = [fact1])
         battle(fact1, fact2)
 
-    def post(self):
-        raise NotImplementedError
+
+def sync_battle(fact1, fact2):
+    # the best fact has 40% chances of having a bad day
+    if fact1.elo_rating > fact2.elo_rating and random.random > .4:
+        return fact1.sync_won_over(fact2)
+    else:
+        return fact2.sync_won_over(fact1)
+
+
+class SynchronousSingleFightHandler(webapp.RequestHandler):
+    "Does one fight between two random facts"
+    def get(self):
+        fact1 = Fact.random()
+        fact2 = Fact.random(exclude = [fact1])
+        sync_battle(fact1, fact2)
 
 
 @tasklets.tasklet
@@ -87,9 +94,6 @@ class InitFactDatabaseHandler(webapp.RequestHandler):
     @context.toplevel
     def get(self):
         init_fact_database()
-
-    def post(self):
-        raise NotImplementedError
 
 
 @tasklets.tasklet
