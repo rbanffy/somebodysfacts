@@ -15,6 +15,11 @@ from google.appengine.ext.webapp import template
 
 import logging
 
+
+#from werkzeug.debug import DebuggedApplication
+
+from admin import *
+
 import debug_tools
 try:
     import ipdb as pdb
@@ -25,17 +30,20 @@ from models import *
 from handlers import *
 
 def main():
-    application = webapp.WSGIApplication([('/', MainHandler),
-                                          ('/fact_fight', FactFightHandler),
-                                          ('/submit', SubmitAFactHandler),
-                                          ('/ten_fights', ManyFightsHandler),
-                                          ('/init', InitFactDatabaseHandler),
-                                          ('/randomize',
-                                           RandomizeRatingsHandler),
-                                          ('/fight', SingleFightHandler),
-                                          ('/fight_sync',
-                                           SynchronousSingleFightHandler)],
-                                         debug=True)
+    application = webapp.WSGIApplication(
+        [
+            ('/', MainHandler),
+            ('/fact_fight', FactFightHandler),
+            ('/submit', SubmitAFactHandler),
+            ('/ten_fights', ManyFightsHandler),
+            ('/init', InitFactDatabaseHandler),
+            ('/randomize',
+             RandomizeRatingsHandler),
+            ('/fight', SingleFightHandler),
+            ('/fight_sync',
+             SynchronousSingleFightHandler),
+            ] + ADMIN_ROUTES,
+        debug = True)
     util.run_wsgi_app(application)
 
 

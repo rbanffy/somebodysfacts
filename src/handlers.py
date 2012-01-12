@@ -5,6 +5,7 @@ import os
 
 from google.appengine.ext import webapp
 from ndb import context, tasklets
+from google.appengine.ext.webapp import template
 
 from models import *
 from forms import *
