@@ -16,7 +16,7 @@ class AdminRootHandler(webapp.RequestHandler):
         The main admin handler
         Lists the kinds of objects that can be managed
         """
-        kinds = [ (name, slugify(name)) for name, obj
+        kinds = [ name for name, obj
                   in inspect.getmembers(models)
                   if inspect.isclass(obj) ]
         path = os.path.join(os.path.dirname(__file__),
