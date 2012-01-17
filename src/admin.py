@@ -3,19 +3,24 @@
 import inspect
 import os
 
-from google.appengine.ext import webapp
+import webapp2
 from ndb import context, tasklets
 from google.appengine.ext.webapp import template
+
+import logging
 
 import models
 # import forms #will be used later for custom forms
 
-class AdminRootHandler(webapp.RequestHandler):
+debug = os.environ.get('SERVER_SOFTWARE', '').startswith('Dev')
+
+class AdminRootHandler(webapp2.RequestHandler):
     def get(self):
         """
         The main admin handler
         Lists the kinds of objects that can be managed
         """
+        logging.debug('AdminRootHandler')
         kinds = [ name for name, obj
                   in inspect.getmembers(models)
                   if inspect.isclass(obj) ]
@@ -24,28 +29,31 @@ class AdminRootHandler(webapp.RequestHandler):
         self.response.out.write(template.render(path, {'kinds': kinds}))
 
 
-class ListHandler(webapp.RequestHandler):
+class ListHandler(webapp2.RequestHandler):
     "Deals with entity listings of a given kind"
-    def get(self, classname):
-        raise NotImplementedError
+    def get(self, kindname):
+        kind = models.get(kindname)
+        self.response.out.write(kind)
 
 
-class AddHandler(webapp.RequestHandler):
+
+
+class AddHandler(webapp2.RequestHandler):
     "Adds an entity of a given kind"
     pass
 
 
-class DetailsHandler(webapp.RequestHandler):
+class DetailsHandler(webapp2.RequestHandler):
     "Shows the details of an entity"
     pass
 
 
-class EditHandler(webapp.RequestHandler):
+class EditHandler(webapp2.RequestHandler):
     "Edits an entity"
     pass
 
 
-class DeleteHandler(webapp.RequestHandler):
+class DeleteHandler(webapp2.RequestHandler):
     "Handles entity deletion"
     def get(self):
         "shows confirmation form"
@@ -56,12 +64,14 @@ class DeleteHandler(webapp.RequestHandler):
         raise NotImplementedError
 
 
-ADMIN_ROUTES = [
-    ('/admin', AdminRootHandler),
-    ('/admin/<classname>', ListHandler),
-    ('/admin/<classname>/add', AddHandler),
-    ('/admin/<classname>/<objecid>', DetailsHandler),
-    ('/admin/<classname>/<objecid>/edit', EditHandler),
-    ('/admin/<classname>/<objecid>/delete', DeleteHandler),
-    ]
+app = webapp2.WSGIApplication(
+    routes = [
+        (r'/admin$', AdminRootHandler),
+        (r'/admin/(\w+)$', ListHandler),
+        (r'/admin/(\w+)/add$', AddHandler),
+        (r'/admin/(\w+)/(\w+)$', DetailsHandler),
+        (r'/admin/(\w+)/(\w+)/edit$', EditHandler),
+        (r'/admin/(\w+)/(\w+)/delete$', DeleteHandler),
+    ],
+    debug = debug)
 

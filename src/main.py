@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.5
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
 import os
@@ -7,45 +7,34 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 from google.appengine.dist import use_library
 use_library('django', '1.2')
 
-from google.appengine.ext import webapp
-from google.appengine.ext.webapp import util
+import webapp2 as webapp
 from google.appengine.api import users, xmpp
-
-from google.appengine.ext.webapp import template
 
 import logging
 
-
-#from werkzeug.debug import DebuggedApplication
-
-from admin import *
-
-import debug_tools
-try:
-    import ipdb as pdb
-except ImportError:
-    import pdb
+debug = os.environ.get('SERVER_SOFTWARE', '').startswith('Dev')
 
 from models import *
 from handlers import *
 
-def main():
-    application = webapp.WSGIApplication(
-        [
-            ('/', MainHandler),
-            ('/fact_fight', FactFightHandler),
-            ('/submit', SubmitAFactHandler),
-            ('/ten_fights', ManyFightsHandler),
-            ('/init', InitFactDatabaseHandler),
-            ('/randomize',
-             RandomizeRatingsHandler),
-            ('/fight', SingleFightHandler),
-            ('/fight_sync',
-             SynchronousSingleFightHandler),
-            ] + ADMIN_ROUTES,
-        debug = True)
-    util.run_wsgi_app(application)
+config = {}
+config['webapp2_extras.sessions'] = {
+    'secret_key': 'something-very-very-secret',
+}
+
+app = webapp2.WSGIApplication(
+    routes = [
+        (r'/', MainHandler),
+        (r'/fact_fight', FactFightHandler),
+        (r'/submit', SubmitAFactHandler),
+        (r'/ten_fights', ManyFightsHandler),
+        (r'/init', InitFactDatabaseHandler),
+        (r'/randomize', RandomizeRatingsHandler),
+        (r'/fight', SingleFightHandler),
+        (r'/fight_sync', SynchronousSingleFightHandler),
+        ] + ADMIN_ROUTES,
+    debug = debug,
+    config = config)
 
 
-if __name__ == '__main__':
-    main()
+

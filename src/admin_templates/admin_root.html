@@ -2,7 +2,7 @@
 
 {% block contents %}
 <ul>
-{% for name, slug in kinds %}
+{% for name in kinds %}
 <li><a href="/admin/{{ name }}">{{ name }}</a></li>
 {% endfor %}
 </ul>
