@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 
-from ndb import model, tasklets
+from google.appengine.ext.ndb import model, tasklets
 
 import datetime
 import logging

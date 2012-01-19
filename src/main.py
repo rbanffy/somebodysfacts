@@ -17,6 +17,7 @@ debug = os.environ.get('SERVER_SOFTWARE', '').startswith('Dev')
 from models import *
 from handlers import *
 
+
 config = {}
 config['webapp2_extras.sessions'] = {
     'secret_key': 'something-very-very-secret',
@@ -32,7 +33,7 @@ app = webapp2.WSGIApplication(
         (r'/randomize', RandomizeRatingsHandler),
         (r'/fight', SingleFightHandler),
         (r'/fight_sync', SynchronousSingleFightHandler),
-        ] + ADMIN_ROUTES,
+        ],
     debug = debug,
     config = config)
 

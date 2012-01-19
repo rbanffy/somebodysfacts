@@ -4,13 +4,17 @@ import inspect
 import os
 
 import webapp2
-from ndb import context, tasklets
+from google.appengine.ext.ndb.model import Model, Key
+from google.appengine.ext.ndb import context, tasklets
 from google.appengine.ext.webapp import template
 
 import logging
 
 import models
 # import forms #will be used later for custom forms
+
+import debug_tools
+
 
 debug = os.environ.get('SERVER_SOFTWARE', '').startswith('Dev')
 
@@ -20,7 +24,6 @@ class AdminRootHandler(webapp2.RequestHandler):
         The main admin handler
         Lists the kinds of objects that can be managed
         """
-        logging.debug('AdminRootHandler')
         kinds = [ name for name, obj
                   in inspect.getmembers(models)
                   if inspect.isclass(obj) ]
@@ -31,9 +34,15 @@ class AdminRootHandler(webapp2.RequestHandler):
 
 class ListHandler(webapp2.RequestHandler):
     "Deals with entity listings of a given kind"
-    def get(self, kindname):
-        kind = models.get(kindname)
-        self.response.out.write(kind)
+    def get(self, kindname, offset = 0):
+        kind = models.__dict__[kindname]
+        #debug_tools.setup(); import pdb ; pdb.set_trace()
+        instances = [ o.key.id() for o in kind.query().fetch(100,
+                                                             offset = offset) ]
+        path = os.path.join(os.path.dirname(__file__),
+                            'admin_templates/admin_list.html')
+        self.response.out.write(template.render(path, {'kind': kindname,
+                                                       'instances': instances}))
 
 
 
@@ -45,7 +54,14 @@ class AddHandler(webapp2.RequestHandler):
 
 class DetailsHandler(webapp2.RequestHandler):
     "Shows the details of an entity"
-    pass
+    def get(self, kindname, object_id):
+        kind = models.__dict__[kindname]
+        entity = Key(kind, int(object_id)).get()
+        detail_names = ['author', 'text']
+        details = { name:entity.__dict__['_values'][name]
+                    for name in detail_names }
+        debug_tools.setup(); import pdb ; pdb.set_trace()
+
 
 
 class EditHandler(webapp2.RequestHandler):

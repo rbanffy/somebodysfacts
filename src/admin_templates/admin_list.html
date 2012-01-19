@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block contents %}
+<ul>
+{% for i in instances %}
+<li><a href="/admin/{{ kind }}/{{ i }}">{{ i }}</a>
+</li>
+{% endfor %}
+</ul>
+
+{% endblock %}

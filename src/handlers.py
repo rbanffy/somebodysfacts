@@ -3,14 +3,14 @@
 import random
 import os
 
-from google.appengine.ext import webapp
-from ndb import context, tasklets
+import webapp2
+from google.appengine.ext.ndb import context, tasklets
 from google.appengine.ext.webapp import template
 
 from models import *
 from forms import *
 
-class MainHandler(webapp.RequestHandler):
+class MainHandler(webapp2.RequestHandler):
     def get(self):
         "The home"
         path = os.path.join(os.path.dirname(__file__), 'templates/index.html')
@@ -18,7 +18,7 @@ class MainHandler(webapp.RequestHandler):
                                                        'Hello webapp world'}))
 
 
-class FactFightHandler(webapp.RequestHandler):
+class FactFightHandler(webapp2.RequestHandler):
     "Handles a fact fight page"
     def get(self):
         raise NotImplementedError
@@ -27,7 +27,7 @@ class FactFightHandler(webapp.RequestHandler):
         raise NotImplementedError
 
 
-class SubmitAFactHandler(webapp.RequestHandler):
+class SubmitAFactHandler(webapp2.RequestHandler):
     "Handles the fact submission page"
     def get(self):
         raise NotImplementedError
@@ -45,7 +45,7 @@ def battle(fact1, fact2):
         yield fact2.won_over(fact1)
 
 
-class ManyFightsHandler(webapp.RequestHandler):
+class ManyFightsHandler(webapp2.RequestHandler):
     "Does a couple random fights"
     @context.toplevel
     def get(self, battles = 10):
@@ -55,7 +55,7 @@ class ManyFightsHandler(webapp.RequestHandler):
             battle(fact1, fact2)
 
 
-class SingleFightHandler(webapp.RequestHandler):
+class SingleFightHandler(webapp2.RequestHandler):
     "Does one fight between two random facts"
     @context.toplevel
     def get(self):
@@ -72,7 +72,7 @@ def sync_battle(fact1, fact2):
         return fact2.sync_won_over(fact1)
 
 
-class SynchronousSingleFightHandler(webapp.RequestHandler):
+class SynchronousSingleFightHandler(webapp2.RequestHandler):
     "Does one fight between two random facts"
     def get(self):
         fact1 = Fact.random()
@@ -90,7 +90,7 @@ def init_fact_database(n = 10):
         raise tasklets.Return(futures)
 
 
-class InitFactDatabaseHandler(webapp.RequestHandler):
+class InitFactDatabaseHandler(webapp2.RequestHandler):
     "If there are no facts, provide 10 nice ones"
     @context.toplevel
     def get(self):
@@ -103,7 +103,7 @@ def randomize_rating(f):
     raise tasklets.Return(f.put_async())
 
 
-class RandomizeRatingsHandler(webapp.RequestHandler):
+class RandomizeRatingsHandler(webapp2.RequestHandler):
     @context.toplevel
     def get(self):
         Fact.query().map_async(randomize_rating)
